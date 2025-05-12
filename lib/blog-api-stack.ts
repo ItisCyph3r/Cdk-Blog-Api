@@ -9,13 +9,11 @@ export class BlogApiStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // 1. DynamoDB Table for blog posts
     const blogTable = new dynamodb.Table(this, 'BlogTable', {
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
     });
 
-    // 2. Cognito User Pool for auth
     const userPool = new cognito.UserPool(this, 'UserPool', {
       selfSignUpEnabled: true,
       signInAliases: { email: true },
@@ -23,14 +21,12 @@ export class BlogApiStack extends cdk.Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
     });
 
-    // 3. Add Google Identity Provider
     const googleProvider = new cognito.UserPoolIdentityProviderGoogle(this, 'Google', {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       userPool,
     });
 
-    // 4. User Pool Domain (required for hosted UI)
     new cognito.UserPoolDomain(this, 'UserPoolDomain', {
       userPool,
       cognitoDomain: {
@@ -38,7 +34,6 @@ export class BlogApiStack extends cdk.Stack {
     },
     });
 
-    // 5. App client for OAuth flows
     const client = userPool.addClient('AppClient', {
       oAuth: {
         flows: { authorizationCodeGrant: true },
@@ -51,7 +46,6 @@ export class BlogApiStack extends cdk.Stack {
       ],
     });
 
-    // 6. Blog Lambda
     const blogLambda = new lambda.Function(this, 'BlogLambda', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'blog.handler',
@@ -61,7 +55,6 @@ export class BlogApiStack extends cdk.Stack {
       },
     });
 
-    // 7. User Profile Lambda
     const userLambda = new lambda.Function(this, 'UserLambda', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'user.handler',
@@ -71,10 +64,8 @@ export class BlogApiStack extends cdk.Stack {
       },
     });
 
-    // 8. Grant permissions
     blogTable.grantReadWriteData(blogLambda);
 
-    // 9. API Gateway
     const api = new apigateway.RestApi(this, 'BlogApi', {
       restApiName: 'Blog API',
     });
@@ -88,7 +79,6 @@ export class BlogApiStack extends cdk.Stack {
     const user = api.root.addResource('user');
     user.addMethod('PUT', new apigateway.LambdaIntegration(userLambda));
 
-    // ✅ 10. Outputs
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url ?? 'Something went wrong with the deploy',
       description: 'API Gateway URL',
