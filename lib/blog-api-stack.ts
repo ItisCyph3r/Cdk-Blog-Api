@@ -21,38 +21,30 @@ export class BlogApiStack extends cdk.Stack {
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
     });
 
-    const googleProvider = new cognito.UserPoolIdentityProviderGoogle(this, 'Google', {
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      userPool,
-    });
-
     new cognito.UserPoolDomain(this, 'UserPoolDomain', {
       userPool,
       cognitoDomain: {
-        domainPrefix: process.env.COGNITO_DOMAIN_PREFIX!, 
+        domainPrefix: 'my-blog-auth', 
     },
     });
 
     const client = userPool.addClient('AppClient', {
       oAuth: {
         flows: { authorizationCodeGrant: true },
-        callbackUrls: [process.env.COGNITO_CALLBACK_URL!],
-        logoutUrls: [process.env.COGNITO_LOGOUT_URL!],
+        callbackUrls: ['http://localhost:3000/callback'],
+        logoutUrls: ['http://localhost:3000/logout'],
       },
       supportedIdentityProviders: [
         cognito.UserPoolClientIdentityProvider.COGNITO,
-        cognito.UserPoolClientIdentityProvider.GOOGLE,
       ],
-    });
-
-    const blogLambda = new lambda.Function(this, 'BlogLambda', {
+    });    const blogLambda = new lambda.Function(this, 'BlogLambda', {
       runtime: lambda.Runtime.NODEJS_18_X,
       handler: 'blog.handler',
       code: lambda.Code.fromAsset('lambda'),
       environment: {
         TABLE_NAME: blogTable.tableName,
       },
+      tracing: lambda.Tracing.ACTIVE,
     });
 
     const userLambda = new lambda.Function(this, 'UserLambda', {
@@ -64,10 +56,19 @@ export class BlogApiStack extends cdk.Stack {
       },
     });
 
-    blogTable.grantReadWriteData(blogLambda);
-
-    const api = new apigateway.RestApi(this, 'BlogApi', {
+    blogTable.grantReadWriteData(blogLambda);    const api = new apigateway.RestApi(this, 'BlogApi', {
       restApiName: 'Blog API',
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: ['Content-Type', 'Authorization'],
+        allowCredentials: true
+      },
+      deployOptions: {
+        tracingEnabled: true,
+        dataTraceEnabled: true,
+        loggingLevel: apigateway.MethodLoggingLevel.INFO,
+      }
     });
 
     const posts = api.root.addResource('posts');
